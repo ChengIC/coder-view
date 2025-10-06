@@ -165,8 +165,9 @@ def insert_report(report: Dict[str, Any]) -> Dict[str, Any]:
                             error_message = error_details.get('error_message', error_message)
                     
                     llm_log_data = {
-                        "report_id": inserted_id,
-                        "run_id": report.get('run_id'),
+                         "report_id": inserted_id,
+                         "run_id": report.get('run_id'),
+                         "user_id": report.get('user_id'),  # Include user_id for LLM logs
                         "request_timestamp": llm_metadata.get('request_time'),
                         "response_timestamp": llm_metadata.get('response_time'),
                         "model_used": llm_metadata.get('model'),
@@ -216,8 +217,8 @@ def insert_report(report: Dict[str, Any]) -> Dict[str, Any]:
         }
 
 
-def get_recent_reports(limit: int = 10) -> Dict[str, Any]:
-    """Get recent evaluation reports from Supabase."""
+def get_user_reports(user_id: str, limit: int = 10) -> Dict[str, Any]:
+    """Get reports for a specific user."""
     client = _get_client()
     
     if not client:
@@ -226,24 +227,26 @@ def get_recent_reports(limit: int = 10) -> Dict[str, Any]:
     table_name = os.getenv("SUPABASE_TABLE", "reports")
     
     try:
-        logger.info(f"Fetching {limit} recent reports from table '{table_name}'")
+        logger.info(f"Fetching {limit} reports for user {user_id}")
         
         result = client.table(table_name)\
-            .select("run_id,project_name,created_at,metrics")\
+            .select("*")\
+            .eq("user_id", user_id)\
             .order("created_at", desc=True)\
             .limit(limit)\
             .execute()
         
         if hasattr(result, 'data'):
-            logger.info(f"Retrieved {len(result.data)} reports")
+            logger.info(f"Retrieved {len(result.data)} reports for user")
             return {
                 "status": "ok",
                 "data": result.data,
-                "count": len(result.data)
+                "count": len(result.data),
+                "user_id": user_id
             }
         else:
             return {"status": "error", "message": "No data returned"}
             
     except Exception as e:
-        logger.error(f"Failed to fetch reports from Supabase: {e}")
+        logger.error(f"Failed to fetch user reports from Supabase: {e}")
         return {"status": "error", "error": str(e)}

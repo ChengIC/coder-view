@@ -5,14 +5,15 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .utils.archive import process_folder_upload
 from .evaluator.metrics import evaluate_codebase_from_contents
 from .evaluator.openai_client import summarize_with_llm, test_llm_connection
-from .supabase_client import insert_report, test_supabase_connection, get_recent_reports
+from .supabase_client import insert_report, test_supabase_connection, get_user_reports
+from .auth import require_auth, optional_auth, AuthUser
 from .logger import logger
 
 APP_DIR = Path(__file__).resolve().parent
@@ -60,21 +61,50 @@ def status() -> Dict[str, Any]:
     }
 
 
+@app.get("/me")
+def get_current_user_info(user: AuthUser = Depends(require_auth)) -> Dict[str, Any]:
+    """Get current user information."""
+    return {
+        "user_id": user.user_id,
+        "email": user.email,
+        "metadata": user.metadata
+    }
+
+
 @app.get("/reports")
-def recent_reports(limit: int = 10) -> Dict[str, Any]:
-    """Get recent evaluation reports from Supabase."""
-    logger.info(f"Recent reports requested (limit: {limit})")
-    return get_recent_reports(limit)
+def recent_reports(
+    limit: int = 10, 
+    user: Optional[AuthUser] = Depends(optional_auth)
+) -> Dict[str, Any]:
+    """Get recent evaluation reports. If authenticated, returns user's reports only."""
+    logger.info(f"Recent reports requested (limit: {limit}, user: {user.email if user else 'anonymous'})")
+    
+    if user:
+        return get_user_reports(user.user_id, limit)
+    else:
+        # For anonymous users, return empty or public reports
+        return {"status": "ok", "data": [], "message": "Login required to view reports"}
+
+
+@app.get("/reports/history")
+def user_report_history(
+    limit: int = 50,
+    user: AuthUser = Depends(require_auth)
+) -> Dict[str, Any]:
+    """Get user's complete report history with pagination."""
+    logger.info(f"Report history requested by user: {user.email} (limit: {limit})")
+    return get_user_reports(user.user_id, limit)
 
 
 @app.post("/evaluate")
 async def evaluate(
     files: List[UploadFile] = File(...),
     project_name: Optional[str] = Form(default=None),
+    user: AuthUser = Depends(require_auth)
 ):
-    """Evaluate uploaded codebase files and return metrics report."""
+    """Evaluate uploaded codebase files and return metrics report. Requires authentication."""
     run_id = str(uuid.uuid4())
-    logger.info(f"Starting evaluation {run_id} with {len(files)} files")
+    logger.info(f"Starting evaluation {run_id} with {len(files)} files for user: {user.email}")
     
     if not files:
         logger.warning("No files received in evaluation request")
@@ -122,6 +152,7 @@ async def evaluate(
         report: Dict[str, Any] = {
             "run_id": run_id,
             "project_name": final_project_name,
+            "user_id": user.user_id,  # Associate report with authenticated user
             "metrics": metrics,
             "summary": summary,
         }
@@ -131,7 +162,7 @@ async def evaluate(
         supabase_result = insert_report(report)
         logger.info(f"Supabase storage result: {supabase_result.get('status', 'unknown')}")
 
-        logger.info(f"Evaluation {run_id} completed successfully")
+        logger.info(f"Evaluation {run_id} completed successfully for user: {user.email}")
         
         return JSONResponse(content={
             "report": report,

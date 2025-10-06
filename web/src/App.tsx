@@ -1,4 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import type { User } from '@supabase/supabase-js'
+import { supabase } from './lib/supabase'
+import { Auth } from './components/Auth'
+import { Dashboard } from './components/Dashboard'
+import { Sidebar } from './components/Sidebar'
 import './App.css'
 
 type ReadabilityMetrics = {
@@ -43,7 +48,16 @@ type Metrics = {
   file_count: number
 }
 
-type Summary = { text?: string } | Record<string, unknown>
+type Summary = { 
+  text?: string
+  overview?: string
+  risks?: string[]
+  recommendations?: string[]
+  code_patterns?: string
+  architecture_notes?: string
+  priority_fixes?: string[]
+  error?: string
+} | Record<string, unknown>
 
 type Report = {
   run_id: string
@@ -61,11 +75,26 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 function App() {
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const [user, setUser] = useState<User | null>(null)
+  const [authToken, setAuthToken] = useState<string | null>(null)
+  const [currentView, setCurrentView] = useState<'evaluate' | 'dashboard'>('evaluate')
   const [files, setFiles] = useState<File[]>([])
   const [folderName, setFolderName] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [report, setReport] = useState<Report | null>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
+  useEffect(() => {
+    // Get auth token when user changes
+    if (user) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setAuthToken(session?.access_token || null)
+      })
+    } else {
+      setAuthToken(null)
+    }
+  }, [user])
 
   useEffect(() => {
     // Enable folder selection attributes without TypeScript prop errors
@@ -93,6 +122,11 @@ function App() {
   }
 
   const onSubmit = async () => {
+    if (!user || !authToken) {
+      setError('Please sign in to evaluate code')
+      return
+    }
+
     setError(null)
     setReport(null)
     if (!files.length) {
@@ -110,6 +144,7 @@ function App() {
       if (folderName) {
         form.append('project_name', folderName)
       }
+      
       const endpoints = [
         `${API_URL}/evaluate`,
         `http://localhost:8001/evaluate`,
@@ -117,7 +152,13 @@ function App() {
       let lastErr: Error | null = null
       for (const url of endpoints) {
         try {
-          const resp = await fetch(url, { method: 'POST', body: form })
+          const resp = await fetch(url, { 
+            method: 'POST', 
+            body: form,
+            headers: {
+              'Authorization': `Bearer ${authToken}`
+            }
+          })
           if (!resp.ok) {
             const msg = await resp.text()
             throw new Error(msg || `Request failed: ${resp.status}`)
@@ -138,53 +179,171 @@ function App() {
     }
   }
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    setUser(null)
+    setAuthToken(null)
+    setCurrentView('evaluate')
+    setReport(null)
+    setFiles([])
+    setFolderName(null)
+  }
+
+  if (!user) {
+    return <Auth onAuthChange={setUser} />
+  }
+
   return (
-    <div className="container">
-      <header>
-        <h1>Codebase Evaluator</h1>
-        <p>Upload a zip of your repository’s parent directory to generate a report.</p>
-      </header>
+    <div className="app">
+      <Sidebar 
+        user={user}
+        currentView={currentView}
+        sidebarCollapsed={sidebarCollapsed}
+        onViewChange={setCurrentView}
+        onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
+        onSignOut={handleSignOut}
+      />
 
-      <section className="uploader">
-        <input ref={inputRef} type="file" onChange={onFileChange} />
-        <button onClick={onSubmit} disabled={loading || files.length === 0}>
-          {loading ? 'Evaluating…' : 'Evaluate'}
-        </button>
-        {error && <p className="error">{error}</p>}
-        {files.length > 0 && (
-          <p>
-            Selected folder: <code>{folderName ?? 'unknown'}</code> • Files: {files.length}
-          </p>
-        )}
-      </section>
+      <main className={`main-content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+        {currentView === 'dashboard' ? (
+          <Dashboard user={user} authToken={authToken || ''} />
+        ) : (
+          <div className="evaluate-page">
+            <div className="page-header">
+              <h1>Evaluate Codebase</h1>
+              <p>Upload a folder to generate a comprehensive code quality report.</p>
+            </div>
 
-      {report && (
-        <section className="report">
-          <h2>Report</h2>
-          <div className="report-grid">
-            <div className="card">
-              <h3>Summary</h3>
-              <pre>{JSON.stringify(report.summary ?? { text: 'No summary (LLM disabled)' }, null, 2)}</pre>
+            <div className="upload-section">
+              <div className="upload-card">
+                <h3>Select Project Folder</h3>
+                <div className="upload-area">
+                  <input ref={inputRef} type="file" onChange={onFileChange} />
+                  <button 
+                    className="upload-btn" 
+                    onClick={onSubmit} 
+                    disabled={loading || files.length === 0}
+                  >
+                    {loading ? 'Evaluating…' : 'Start Evaluation'}
+                  </button>
+                </div>
+                
+                {files.length > 0 && (
+                  <div className="upload-info">
+                    <p><strong>Selected:</strong> {folderName ?? 'unknown'}</p>
+                    <p><strong>Files:</strong> {files.length}</p>
+                  </div>
+                )}
+                
+                {error && <div className="error-message">{error}</div>}
+              </div>
             </div>
-            <div className="card">
-              <h3>Readability</h3>
-              <pre>{JSON.stringify(report.metrics.readability, null, 2)}</pre>
-            </div>
-            <div className="card">
-              <h3>Reusability</h3>
-              <pre>{JSON.stringify(report.metrics.reusability, null, 2)}</pre>
-            </div>
-            <div className="card">
-              <h3>Robustness</h3>
-              <pre>{JSON.stringify(report.metrics.robustness, null, 2)}</pre>
-            </div>
-            <div className="card">
-              <h3>Performance</h3>
-              <pre>{JSON.stringify(report.metrics.performance, null, 2)}</pre>
-            </div>
+
+            {report && (
+              <div className="results-section">
+                <div className="results-header">
+                  <h2>Evaluation Results</h2>
+                  <div className="results-meta">
+                    <span>Project: {report.project_name}</span>
+                    <span>Files: {report.metrics.file_count}</span>
+                  </div>
+                </div>
+                
+                <div className="results-grid">
+                  <div className="result-card summary-card">
+                    <h3>AI Summary</h3>
+                    <div className="summary-content">
+                       {report.summary && typeof report.summary === 'object' && 'overview' in report.summary ? (
+                         <div>
+                           <p><strong>Overview:</strong> {String(report.summary.overview)}</p>
+                           {Array.isArray(report.summary.risks) && report.summary.risks.length > 0 && (
+                             <div>
+                               <p><strong>Key Risks:</strong></p>
+                               <ul>
+                                 {report.summary.risks.map((risk: string, i: number) => (
+                                   <li key={i}>{risk}</li>
+                                 ))}
+                               </ul>
+                             </div>
+                           )}
+                           {Array.isArray(report.summary.recommendations) && report.summary.recommendations.length > 0 && (
+                             <div>
+                               <p><strong>Recommendations:</strong></p>
+                               <ul>
+                                 {report.summary.recommendations.map((rec: string, i: number) => (
+                                   <li key={i}>{rec}</li>
+                                 ))}
+                               </ul>
+                             </div>
+                           )}
+                         </div>
+                       ) : (
+                         <pre>{JSON.stringify(report.summary ?? { text: 'No summary available' }, null, 2)}</pre>
+                       )}
+                     </div>
+                  </div>
+                  
+                  <div className="result-card">
+                    <h3>📚 Readability</h3>
+                    <div className="metric-content">
+                      <div className="metric-item">
+                        <span>README: {report.metrics.readability.has_readme ? '✅' : '❌'}</span>
+                      </div>
+                      <div className="metric-item">
+                        <span>Python Functions: {report.metrics.readability.python.function_count}</span>
+                      </div>
+                      <div className="metric-item">
+                        <span>Docstrings: {report.metrics.readability.python.docstring_count}</span>
+                      </div>
+                      <div className="metric-item">
+                        <span>Comment Density: {(report.metrics.readability.python.comment_density * 100).toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="result-card">
+                    <h3>♻️ Reusability</h3>
+                    <div className="metric-content">
+                      <div className="metric-item">
+                        <span>Duplicate Groups: {report.metrics.reusability.duplicate_group_count}</span>
+                      </div>
+                      <p className="recommendation">{report.metrics.reusability.recommendation}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="result-card">
+                    <h3>🛡️ Robustness</h3>
+                    <div className="metric-content">
+                      <div className="metric-item">
+                        <span>Has Tests: {report.metrics.robustness.has_tests ? '✅' : '❌'}</span>
+                      </div>
+                      <div className="metric-item">
+                        <span>Try/Except Blocks: {report.metrics.robustness.python.try_except_count}</span>
+                      </div>
+                      <div className="metric-item">
+                        <span>Type Hints: {(report.metrics.robustness.python.typed_function_ratio * 100).toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="result-card">
+                    <h3>⚡ Performance</h3>
+                    <div className="metric-content">
+                      <div className="metric-item">
+                        <span>SQL Risk Files: {report.metrics.performance.sql_injection_risk_files.length}</span>
+                      </div>
+                      <div className="metric-item">
+                        <span>Risky Calls: {report.metrics.performance.risky_calls_files.length}</span>
+                      </div>
+                      <p className="recommendation">{report.metrics.performance.notes}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        </section>
-      )}
+        )}
+      </main>
     </div>
   )
 }

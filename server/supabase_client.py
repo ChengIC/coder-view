@@ -1,7 +1,7 @@
 import os
 from typing import Any, Dict, Optional
 
-from .logger import logger
+from logger import logger
 
 try:
     from supabase import create_client, Client

@@ -20,7 +20,8 @@ interface ChartData {
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8']
 
-export function Dashboard({ user, authToken }: DashboardProps) {
+export function Dashboard(props: DashboardProps) {
+  const { authToken } = props
   // user is available for future features like personalized greetings
   const [reports, setReports] = useState<Report[]>([])
   const [loading, setLoading] = useState(true)
@@ -189,7 +190,7 @@ export function Dashboard({ user, authToken }: DashboardProps) {
                 dataKey="value"
               >
                 {pieData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  <Cell key={`cell-${index}-${entry.name}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
               <Tooltip />

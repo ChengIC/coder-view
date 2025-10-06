@@ -3,7 +3,7 @@ import json
 from typing import Any, Dict, Optional
 
 import requests
-from ..logger import logger
+from logger import logger
 
 
 def test_llm_connection() -> Dict[str, Any]:

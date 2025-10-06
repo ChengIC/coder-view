@@ -9,12 +9,12 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .utils.archive import process_folder_upload
-from .evaluator.metrics import evaluate_codebase_from_contents
-from .evaluator.openai_client import summarize_with_llm, test_llm_connection
-from .supabase_client import insert_report, test_supabase_connection, get_user_reports
-from .auth import require_auth, optional_auth, AuthUser
-from .logger import logger
+from utils.archive import process_folder_upload
+from evaluator.metrics import evaluate_codebase_from_contents
+from evaluator.openai_client import summarize_with_llm, test_llm_connection
+from supabase_client import insert_report, test_supabase_connection, get_user_reports
+from auth import require_auth, optional_auth, AuthUser
+from logger import logger
 
 APP_DIR = Path(__file__).resolve().parent
 
@@ -24,9 +24,20 @@ load_dotenv(APP_DIR / ".env")
 app = FastAPI(title="Codebase Evaluator API")
 
 # Allow local dev frontends
+# Configure CORS (includes dev and docker defaults; override via ALLOWED_ORIGINS)
+default_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8080",
+]
+env_origins = os.getenv("ALLOWED_ORIGINS")
+allow_origins = (
+    [o.strip() for o in env_origins.split(",") if o.strip()] if env_origins else default_origins
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

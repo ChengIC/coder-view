@@ -42,11 +42,70 @@ Create a `reports` table with JSON columns (or text for summary):
 
 Backend (FastAPI):
 1. Install Python deps: `python3 -m pip install -r server/requirements.txt`
-2. Run dev server: `uvicorn server.main:app --reload --port 8000`
+2. CD into `server/`
+2. Run dev server: `uvicorn main:app --reload --port 8000`
 
 Frontend (React + Vite):
 1. From `web/`: `sudo npm install` (if needed)
 2. Run dev server: `sudo npm run dev`
+
+## Deployment (Docker)
+
+This repo ships with production-ready Docker images and a compose file to deploy the full system (API + Web):
+
+- API: FastAPI served by `uvicorn` on port `8000`
+- Web: React + Vite built to static assets and served by Nginx on port `8080`
+
+### 1) Prepare environment
+
+- Copy `server/.env.example` to `server/.env` and fill in the values:
+
+```
+LLM_API_BASE=https://your-company-llm.example.com
+LLM_API_KEY=your_llm_api_key
+LLM_MODEL=gpt-4o-mini
+
+SUPABASE_URL=https://your-supabase-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+SUPABASE_ANON_KEY=your_anon_key_if_needed
+SUPABASE_JWT_SECRET=your_jwt_secret_from_supabase_settings
+```
+
+- Optionally set frontend build-time variables via a top-level `.env` file or your shell when running compose:
+
+```
+# Used at build-time for the web image
+VITE_API_URL=http://localhost:8000
+VITE_SUPABASE_URL=https://your-supabase-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_anon_key
+```
+
+If not provided, the frontend defaults to `http://localhost:8000` for the API.
+
+### 2) Build and run
+
+From the repo root:
+
+```
+docker compose up -d --build
+```
+
+This starts:
+- `api` on `http://localhost:8000`
+- `web` on `http://localhost:8080`
+
+### 3) Health checks
+
+- API health: `curl http://localhost:8000/health`
+- Web served: open `http://localhost:8080/`
+
+### Notes
+
+- The frontend is a static SPA served by Nginx with client-side routing (`try_files /index.html`).
+- For production, set `VITE_API_URL` to your public API endpoint (e.g., `https://api.example.com`).
+- Authentication uses Supabase JWT verification; set `SUPABASE_JWT_SECRET` in `server/.env`.
+- CORS: set `ALLOWED_ORIGINS` in `server/.env` (comma-separated) for your frontend origin(s). Defaults include `http://localhost:5173` and `http://localhost:8080`.
+- Logs are written to `server/logs/app.log` inside the container; consider mounting a volume if you need persistence.
 
 ## Usage
 1. Zip your codebase parent directory (exclude heavy folders like `node_modules` if possible).

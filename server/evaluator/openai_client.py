@@ -211,6 +211,23 @@ def summarize_with_llm(metrics: Dict[str, Any], code_samples: Dict[str, str] = N
         }
     except requests.exceptions.HTTPError as e:
         logger.error(f"LLM API HTTP error: {e}")
+        
+        # Try to extract detailed error from response
+        error_details = str(e)
+        try:
+            if hasattr(e, 'response') and e.response is not None:
+                error_response = e.response.json()
+                error_details = {
+                    "status_code": e.response.status_code,
+                    "error_type": error_response.get('error', {}).get('type', 'unknown'),
+                    "error_message": error_response.get('error', {}).get('message', str(e)),
+                    "error_code": error_response.get('error', {}).get('code'),
+                    "raw_response": error_response
+                }
+        except Exception:
+            # If we can't parse the error response, use the original error
+            pass
+        
         return {
             "error": f"LLM API error: {e}",
             "_llm_metadata": {
@@ -218,7 +235,8 @@ def summarize_with_llm(metrics: Dict[str, Any], code_samples: Dict[str, str] = N
                 "response_time": datetime.utcnow().isoformat(),
                 "model": model,
                 "tokens_used": 0,
-                "success": False
+                "success": False,
+                "error_details": error_details
             }
         }
     except Exception as e:
@@ -230,6 +248,7 @@ def summarize_with_llm(metrics: Dict[str, Any], code_samples: Dict[str, str] = N
                 "response_time": datetime.utcnow().isoformat(),
                 "model": model,
                 "tokens_used": 0,
-                "success": False
+                "success": False,
+                "error_details": str(e)
             }
         }

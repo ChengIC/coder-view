@@ -151,6 +151,19 @@ def insert_report(report: Dict[str, Any]) -> Dict[str, Any]:
             # Insert detailed LLM log if we have metadata
             if llm_metadata and inserted_id != 'unknown':
                 try:
+                    # Extract error details if available
+                    error_message = None
+                    error_details = None
+                    
+                    if 'error' in summary:
+                        error_message = summary.get('error')
+                    
+                    if llm_metadata.get('error_details'):
+                        error_details = llm_metadata['error_details']
+                        # If error_details is a dict, store as JSON, otherwise as string
+                        if isinstance(error_details, dict):
+                            error_message = error_details.get('error_message', error_message)
+                    
                     llm_log_data = {
                         "report_id": inserted_id,
                         "run_id": report.get('run_id'),
@@ -161,12 +174,20 @@ def insert_report(report: Dict[str, Any]) -> Dict[str, Any]:
                         "request_size": len(str(metrics)) + len(str(report.get('code_samples', {}))),
                         "response_size": len(str(summary)),
                         "success": llm_metadata.get('success', False),
-                        "error_message": summary.get('error') if 'error' in summary else None,
-                        "response_data": summary if llm_metadata.get('success') else None
+                        "error_message": error_message,
+                        "response_data": {
+                            "summary": summary if llm_metadata.get('success') else None,
+                            "error_details": error_details if error_details else None,
+                            "metadata": llm_metadata
+                        }
                     }
                     
                     llm_result = client.table("llm_logs").insert(llm_log_data).execute()
                     logger.info(f"LLM log inserted for report {inserted_id}")
+                    
+                    if error_details:
+                        logger.info(f"Stored detailed OpenAI error: {error_message}")
+                        
                 except Exception as e:
                     logger.warning(f"Failed to insert LLM log: {e}")
             

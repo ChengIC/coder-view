@@ -97,12 +97,20 @@ function App() {
   }, [user])
 
   useEffect(() => {
-    // Enable folder selection attributes without TypeScript prop errors
-    const el = inputRef.current
+    // Enable folder selection using DOM properties for better browser support
+    const el = inputRef.current as (HTMLInputElement & {
+      webkitdirectory?: boolean
+      directory?: boolean
+    }) | null
     if (el) {
+      // Prefer properties; also set attributes as fallback
+      el.multiple = true
+      el.webkitdirectory = true
+      el.directory = true
       el.setAttribute('webkitdirectory', '')
       el.setAttribute('directory', '')
-      el.setAttribute('multiple', '')
+      // Reset to ensure browser recognizes the changes
+      el.value = ''
     }
   }, [])
 
@@ -218,7 +226,17 @@ function App() {
               <div className="upload-card">
                 <h3>Select Project Folder</h3>
                 <div className="upload-area">
-                  <input ref={inputRef} type="file" onChange={onFileChange} />
+                  <label className="folder-upload-label">
+                    <span>↗️ Click me</span>
+                    <input 
+                      ref={inputRef} 
+                      type="file" 
+                      onChange={onFileChange} 
+                      webkitdirectory="" 
+                      directory="" 
+                      multiple
+                    />
+                  </label>
                   <button 
                     className="upload-btn" 
                     onClick={onSubmit} 

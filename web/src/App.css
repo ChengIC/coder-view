@@ -268,7 +268,10 @@
   margin-bottom: 2rem;
 }
 
-.upload-area input[type="file"] {
+.folder-upload-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   padding: 1.5rem;
   background: rgba(42, 42, 42, 0.8);
   border: 2px dashed #646cff;
@@ -281,9 +284,27 @@
   transition: all 0.3s ease;
 }
 
-.upload-area input[type="file"]:hover {
+.folder-upload-label span {
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+  font-size: 1.2rem;
+}
+
+.folder-upload-label span::first-letter {
+  font-size: 1.8rem;
+  margin-right: 0.3rem;
+  vertical-align: middle;
+}
+
+.folder-upload-label:hover {
   border-color: #8b5cf6;
   background: rgba(42, 42, 42, 1);
+}
+
+.upload-area input[type="file"] {
+  opacity: 0;
+  position: absolute;
+  pointer-events: none;
 }
 
 .upload-btn {

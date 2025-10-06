@@ -178,16 +178,91 @@ def _performance_metrics(files: List[Path]) -> Dict[str, Any]:
     }
 
 
-def evaluate_codebase(root: Path) -> Dict[str, Any]:
-    files = _iter_files(root)
-    readability = _readability_metrics(root, files)
-    reusability = _reusability_metrics(files)
-    robustness = _robustness_metrics(files)
-    performance = _performance_metrics(files)
-    return {
-        "readability": readability,
-        "reusability": reusability,
-        "robustness": robustness,
-        "performance": performance,
-        "file_count": len(files),
-    }
+def evaluate_codebase_from_contents(file_contents: Dict[str, str]) -> Dict[str, Any]:
+    """Evaluate codebase directly from file contents without disk storage."""
+    # Create temporary files for analysis
+    import tempfile
+    import shutil
+    
+    temp_dir = tempfile.mkdtemp()
+    try:
+        # Write files to temp directory
+        file_paths = []
+        for rel_path, content in file_contents.items():
+            file_path = Path(temp_dir) / rel_path
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            try:
+                file_path.write_text(content, encoding='utf-8')
+                file_paths.append(file_path)
+            except Exception:
+                continue
+        
+        # Run existing analysis on temp files
+        readability = _readability_metrics(Path(temp_dir), file_paths)
+        reusability = _reusability_metrics(file_paths)
+        robustness = _robustness_metrics(file_paths)
+        performance = _performance_metrics(file_paths)
+        
+        # Get code samples directly from contents
+        code_samples = _get_code_samples_from_contents(file_contents)
+        
+        return {
+            "readability": readability,
+            "reusability": reusability,
+            "robustness": robustness,
+            "performance": performance,
+            "file_count": len(file_paths),
+            "code_samples": code_samples,
+        }
+    finally:
+        # Always cleanup temp directory
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def _get_code_samples_from_contents(file_contents: Dict[str, str], max_samples: int = 5, max_size_per_file: int = 2000) -> Dict[str, str]:
+    """Extract representative code samples directly from file contents."""
+    samples = {}
+    
+    # Filter code files
+    code_files = {}
+    for rel_path, content in file_contents.items():
+        if any(rel_path.lower().endswith(ext) for ext in CODE_EXTS):
+            code_files[rel_path] = content
+    
+    # Prioritize by file size and type
+    python_files = {k: v for k, v in code_files.items() if k.lower().endswith('.py')}
+    js_ts_files = {k: v for k, v in code_files.items() if any(k.lower().endswith(ext) for ext in {'.js', '.ts', '.tsx', '.jsx'})}
+    
+    def file_priority(item):
+        rel_path, content = item
+        size = len(content)
+        # Prefer files between 500-5000 characters
+        if 500 <= size <= 5000:
+            return 0  # highest priority
+        elif size < 500:
+            return 1
+        else:
+            return 2
+    
+    selected_files = []
+    
+    # Add Python files
+    python_sorted = sorted(python_files.items(), key=file_priority)[:max_samples//2 + 1]
+    selected_files.extend(python_sorted)
+    
+    # Add JS/TS files
+    js_sorted = sorted(js_ts_files.items(), key=file_priority)[:max_samples//2 + 1]
+    selected_files.extend(js_sorted)
+    
+    # Limit total samples
+    selected_files = selected_files[:max_samples]
+    
+    for rel_path, content in selected_files:
+        if content.strip():
+            # Truncate if too long
+            if len(content) > max_size_per_file:
+                content = content[:max_size_per_file] + "\n... (truncated)"
+            samples[rel_path] = content
+    
+    return samples

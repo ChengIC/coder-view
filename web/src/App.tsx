@@ -110,16 +110,27 @@ function App() {
       if (folderName) {
         form.append('project_name', folderName)
       }
-      const resp = await fetch(`${API_URL}/evaluate`, {
-        method: 'POST',
-        body: form,
-      })
-      if (!resp.ok) {
-        const msg = await resp.text()
-        throw new Error(msg || 'Request failed')
+      const endpoints = [
+        `${API_URL}/evaluate`,
+        `http://localhost:8001/evaluate`,
+      ]
+      let lastErr: Error | null = null
+      for (const url of endpoints) {
+        try {
+          const resp = await fetch(url, { method: 'POST', body: form })
+          if (!resp.ok) {
+            const msg = await resp.text()
+            throw new Error(msg || `Request failed: ${resp.status}`)
+          }
+          const data = (await resp.json()) as EvaluateResponse
+          setReport(data.report)
+          lastErr = null
+          break
+        } catch (err) {
+          lastErr = err as Error
+        }
       }
-      const data = (await resp.json()) as EvaluateResponse
-      setReport(data.report)
+      if (lastErr) throw lastErr
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Unknown error')
     } finally {

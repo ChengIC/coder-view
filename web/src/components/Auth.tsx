@@ -129,7 +129,7 @@ interface UserProfileProps {
 export function UserProfile({ user, onSignOut }: UserProfileProps) {
   return (
     <div className="user-profile">
-      <div className="user-info">
+      <div className="user-info" role="group" aria-label="User actions">
         <span className="user-email">{user.email}</span>
         <button onClick={onSignOut} className="sign-out-btn">
           Sign Out

@@ -21,7 +21,7 @@ export function Sidebar({
   return (
     <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-header">
-        {!sidebarCollapsed && <h1>Codebase Evaluator</h1>}
+        {!sidebarCollapsed && <h3>Codebase Evaluator</h3>}
         <button 
           className="sidebar-toggle"
           onClick={onToggleSidebar}

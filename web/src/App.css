@@ -848,9 +848,13 @@
 /* Auth user info row spacing */
 .user-profile .user-info {
   display: flex;
-  flex-direction: column;
+  flex-direction: column !important; /* ensure vertical stack */
   align-items: flex-start;
   gap: 0.75rem;
+}
+
+.user-profile .user-email {
+  word-break: break-word;
 }
 
 /* Modal styles for report details */
